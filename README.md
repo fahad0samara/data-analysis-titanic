@@ -67,7 +67,7 @@ An advanced machine learning project that analyzes the Titanic dataset and predi
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/yourusername/titanic-survival-analysis.git
+   git clone  https://github.com/fahad0samara/data-analysis-titanic.git
    cd titanic-survival-analysis
    ```
 

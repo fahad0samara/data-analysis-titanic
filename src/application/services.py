@@ -40,15 +40,37 @@ class ModelService:
         
         return df[self.feature_columns]
     
+    def calculate_metrics(self, y_true, y_pred, y_pred_proba) -> Dict:
+        """Calculate model metrics safely."""
+        metrics = {}
+        
+        # Basic metrics that don't require multiple classes
+        metrics['accuracy'] = accuracy_score(y_true, y_pred)
+        
+        # Metrics that require multiple classes
+        unique_classes = np.unique(y_true)
+        if len(unique_classes) > 1:
+            metrics['precision'] = precision_score(y_true, y_pred)
+            metrics['recall'] = recall_score(y_true, y_pred)
+            metrics['f1_score'] = f1_score(y_true, y_pred)
+            metrics['roc_auc'] = roc_auc_score(y_true, y_pred_proba)
+            metrics['confusion_matrix'] = confusion_matrix(y_true, y_pred).tolist()
+        
+        return metrics
+    
     def train(self, df: pd.DataFrame) -> ModelMetrics:
         """Train the model and return metrics."""
         # Prepare data
         X = self.preprocess_data(df)
         y = df['Survived']
         
+        # Ensure we have enough samples of each class
+        if len(np.unique(y)) < 2:
+            raise ValueError("Training data must contain samples from both classes (survived and not survived)")
+        
         # Split data
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
+            X, y, test_size=0.2, random_state=42, stratify=y
         )
         
         # Train model
@@ -63,18 +85,18 @@ class ModelService:
         y_pred_proba = self.model.predict_proba(X_test)[:, 1]
         
         # Calculate metrics
-        metrics = ModelMetrics(
-            accuracy=accuracy_score(y_test, y_pred),
-            precision=precision_score(y_test, y_pred),
-            recall=recall_score(y_test, y_pred),
-            f1_score=f1_score(y_test, y_pred),
-            roc_auc=roc_auc_score(y_test, y_pred_proba),
+        metrics = self.calculate_metrics(y_test, y_pred, y_pred_proba)
+        
+        return ModelMetrics(
+            accuracy=metrics['accuracy'],
+            precision=metrics.get('precision'),
+            recall=metrics.get('recall'),
+            f1_score=metrics.get('f1_score'),
+            roc_auc=metrics.get('roc_auc'),
             feature_importance=dict(zip(self.feature_columns, 
                                       self.model.feature_importances_)),
-            confusion_matrix=confusion_matrix(y_test, y_pred).tolist()
+            confusion_matrix=metrics.get('confusion_matrix')
         )
-        
-        return metrics
     
     def predict(self, passenger: Passenger) -> ModelPrediction:
         """Make a prediction for a single passenger."""
@@ -120,10 +142,10 @@ class ModelService:
         y_test = test_data['Survived']
         
         y_pred = self.model.predict(X_test)
-        y_prob = self.model.predict_proba(X_test)[:, 1]
+        y_pred_proba = self.model.predict_proba(X_test)[:, 1]
         
-        return {
-            'accuracy': accuracy_score(y_test, y_pred),
-            'feature_importance': dict(zip(self.feature_columns, 
-                                         self.model.feature_importances_))
-        }
+        metrics = self.calculate_metrics(y_test, y_pred, y_pred_proba)
+        metrics['feature_importance'] = dict(zip(self.feature_columns, 
+                                               self.model.feature_importances_))
+        
+        return metrics
