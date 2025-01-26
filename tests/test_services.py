@@ -1,95 +1,87 @@
-"""Tests for application services."""
+"""Tests for model service."""
 import pytest
-from datetime import datetime
-from src.domain.entities import Passenger, ModelPrediction, ModelMetrics
+import pandas as pd
+import numpy as np
 from src.application.services import ModelService
-from src.domain.interfaces import IDataPreprocessor
+from src.domain.entities import Passenger
 from src.domain.exceptions import ModelNotFoundError, PredictionError
 
-class MockPreprocessor(IDataPreprocessor):
-    """Mock preprocessor for testing."""
-    
-    def preprocess(self, data):
-        return data
-    
-    def feature_engineering(self, data):
-        return data
-    
-    def encode_categorical(self, data):
-        return data
+@pytest.fixture
+def sample_df():
+    """Create a sample DataFrame for testing."""
+    return pd.DataFrame({
+        'Age': [25, 35, 45, 55, 65],
+        'Fare': [10.0, 30.0, 60.0, 120.0, 250.0],
+        'Survived': [0, 1, 1, 0, 1],
+        'Pclass': [1, 2, 3, 1, 2],
+        'Sex': [0, 1, 0, 1, 0],  # 0: male, 1: female
+        'SibSp': [1, 0, 2, 1, 0],
+        'Parch': [0, 2, 1, 0, 1],
+        'Embarked': [0, 1, 2, 0, 1]  # 0: S, 1: C, 2: Q
+    })
 
 @pytest.fixture
 def model_service():
-    """Create a model service instance for testing."""
-    return ModelService(MockPreprocessor())
+    """Create a model service instance."""
+    return ModelService()
 
-@pytest.fixture
-def sample_passenger():
-    """Create a sample passenger for testing."""
-    return Passenger(
+def test_model_training(model_service, sample_df):
+    """Test model training."""
+    metrics = model_service.train(sample_df)
+    assert metrics is not None
+    assert hasattr(metrics, 'accuracy')
+    assert hasattr(metrics, 'feature_importance')
+    assert isinstance(metrics.accuracy, float)
+    assert isinstance(metrics.feature_importance, dict)
+
+def test_model_prediction(model_service, sample_df):
+    """Test model prediction."""
+    # Train the model first
+    model_service.train(sample_df)
+    
+    # Create a test passenger
+    passenger = Passenger(
         passenger_id=1,
-        pclass=3,
-        name="Test Passenger",
-        sex="male",
-        age=25,
+        pclass=1,
+        sex=0,  # male
+        age=30,
         sibsp=1,
         parch=0,
-        ticket="TEST123",
-        fare=7.25,
-        cabin=None,
-        embarked="S",
-        survived=None
+        fare=50.0,
+        embarked=0  # S
     )
-
-def test_model_training(model_service, sample_passenger):
-    """Test model training functionality."""
-    # Train model with sample data
-    metrics = model_service.train([sample_passenger])
     
-    # Verify metrics
-    assert isinstance(metrics, ModelMetrics)
-    assert 0 <= metrics.accuracy <= 1
-    assert 0 <= metrics.precision <= 1
-    assert 0 <= metrics.recall <= 1
-    assert 0 <= metrics.f1_score <= 1
-    assert metrics.training_timestamp is not None
-    assert metrics.feature_importance is not None
-
-def test_model_prediction(model_service, sample_passenger):
-    """Test model prediction functionality."""
-    # Train model first
-    model_service.train([sample_passenger])
-    
-    # Make prediction
-    prediction = model_service.predict(sample_passenger)
-    
-    # Verify prediction
-    assert isinstance(prediction, ModelPrediction)
-    assert prediction.passenger_id == sample_passenger.passenger_id
-    assert 0 <= prediction.survival_probability <= 1
+    prediction = model_service.predict(passenger)
+    assert prediction is not None
+    assert hasattr(prediction, 'survival_probability')
+    assert isinstance(prediction.survival_probability, float)
     assert isinstance(prediction.predicted_survival, bool)
-    assert prediction.prediction_timestamp is not None
-    assert prediction.model_version is not None
-    assert prediction.feature_importance is not None
 
-def test_prediction_without_training(model_service, sample_passenger):
-    """Test prediction without training the model first."""
+def test_prediction_without_training(model_service):
+    """Test prediction without training raises error."""
+    passenger = Passenger(
+        passenger_id=1,
+        pclass=1,
+        sex=0,
+        age=30,
+        sibsp=1,
+        parch=0,
+        fare=50.0,
+        embarked=0
+    )
+    
     with pytest.raises(ModelNotFoundError):
-        model_service.predict(sample_passenger)
+        model_service.predict(passenger)
 
-def test_model_evaluation(model_service, sample_passenger):
-    """Test model evaluation functionality."""
-    # Train model first
-    model_service.train([sample_passenger])
+def test_model_evaluation(model_service, sample_df):
+    """Test model evaluation."""
+    # Train the model first
+    model_service.train(sample_df)
     
-    # Evaluate model
-    metrics = model_service.evaluate([sample_passenger])
-    
-    # Verify metrics
-    assert isinstance(metrics, ModelMetrics)
-    assert 0 <= metrics.accuracy <= 1
-    assert 0 <= metrics.precision <= 1
-    assert 0 <= metrics.recall <= 1
-    assert 0 <= metrics.f1_score <= 1
-    assert metrics.training_timestamp is not None
-    assert metrics.feature_importance is not None
+    # Evaluate on test data
+    metrics = model_service.evaluate(sample_df)
+    assert metrics is not None
+    assert 'accuracy' in metrics
+    assert 'feature_importance' in metrics
+    assert isinstance(metrics['accuracy'], float)
+    assert isinstance(metrics['feature_importance'], dict)

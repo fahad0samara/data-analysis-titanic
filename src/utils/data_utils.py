@@ -8,13 +8,19 @@ def load_and_preprocess_data(filepath: str) -> pd.DataFrame:
     """Load and preprocess the Titanic dataset."""
     df = pd.read_csv(filepath)
     
-    # Handle missing values
+    # Convert categorical variables
+    df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
+    df['Embarked'] = df['Embarked'].map({'S': 0, 'C': 1, 'Q': 2})
+    
+    # Fill missing values
     df['Age'].fillna(df['Age'].median(), inplace=True)
     df['Fare'].fillna(df['Fare'].median(), inplace=True)
     df['Embarked'].fillna(df['Embarked'].mode()[0], inplace=True)
     
-    # Create new features
+    # Create family size feature
     df['FamilySize'] = df['SibSp'] + df['Parch'] + 1
+    
+    # Create new features
     df['IsAlone'] = (df['FamilySize'] == 1).astype(int)
     
     # Extract title from name
@@ -43,25 +49,53 @@ def encode_categorical_features(df: pd.DataFrame, categorical_columns: List[str]
 def create_age_groups(df: pd.DataFrame, num_bins: int = 5) -> pd.DataFrame:
     """Create age groups from continuous age values."""
     df = df.copy()
-    df['AgeGroup'] = pd.qcut(df['Age'], q=num_bins, labels=['Very Young', 'Young', 'Middle', 'Senior', 'Elderly'])
+    # Ensure Age is numeric
+    df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
+    
+    bins = [0, 12, 18, 35, 50, 65, float('inf')]
+    labels = ['Child', 'Teen', 'Young Adult', 'Adult', 'Senior', 'Elderly']
+    df['AgeGroup'] = pd.cut(df['Age'], bins=bins, labels=labels, right=False)
     return df
 
 def create_fare_groups(df: pd.DataFrame, num_bins: int = 4) -> pd.DataFrame:
     """Create fare groups from continuous fare values."""
     df = df.copy()
-    df['FareGroup'] = pd.qcut(df['Fare'], q=num_bins, labels=['Low', 'Medium', 'High', 'Very High'])
+    # Ensure Fare is numeric
+    df['Fare'] = pd.to_numeric(df['Fare'], errors='coerce')
+    
+    bins = [0, 20, 50, 100, 200, float('inf')]
+    labels = ['Low', 'Medium-Low', 'Medium', 'Medium-High', 'High']
+    df['FareGroup'] = pd.cut(df['Fare'], bins=bins, labels=labels, right=False)
     return df
 
 def calculate_survival_statistics(df: pd.DataFrame) -> Dict:
     """Calculate various survival statistics from the dataset."""
-    stats = {
-        'overall_survival_rate': df['Survived'].mean(),
-        'survival_by_class': df.groupby('Pclass')['Survived'].mean().to_dict(),
-        'survival_by_sex': df.groupby('Sex')['Survived'].mean().to_dict(),
-        'survival_by_age_group': df.groupby('AgeGroup')['Survived'].mean().to_dict() if 'AgeGroup' in df.columns else None,
-        'survival_by_fare_group': df.groupby('FareGroup')['Survived'].mean().to_dict() if 'FareGroup' in df.columns else None,
-        'survival_by_family_size': df.groupby('FamilySize')['Survived'].mean().to_dict()
-    }
+    stats = {}
+    
+    # Ensure FamilySize exists
+    if 'FamilySize' not in df.columns:
+        df['FamilySize'] = df['SibSp'] + df['Parch'] + 1
+    
+    # Overall survival rate
+    stats['overall_survival_rate'] = df['Survived'].mean()
+    
+    # Survival rate by passenger class
+    stats['survival_by_class'] = df.groupby('Pclass')['Survived'].mean().to_dict()
+    
+    # Survival rate by sex
+    stats['survival_by_sex'] = df.groupby('Sex')['Survived'].mean().to_dict()
+    
+    # Survival rate by family size
+    stats['survival_by_family_size'] = df.groupby('FamilySize')['Survived'].mean().to_dict()
+    
+    # Survival rate by age group
+    if 'AgeGroup' in df.columns:
+        stats['survival_by_age_group'] = df.groupby('AgeGroup')['Survived'].mean().to_dict()
+    
+    # Survival rate by fare group
+    if 'FareGroup' in df.columns:
+        stats['survival_by_fare_group'] = df.groupby('FareGroup')['Survived'].mean().to_dict()
+    
     return stats
 
 def generate_feature_interactions(df: pd.DataFrame) -> pd.DataFrame:
@@ -95,3 +129,7 @@ def prepare_features_for_model(df: pd.DataFrame, feature_columns: List[str]) -> 
 def calculate_correlation_matrix(df: pd.DataFrame, features: List[str]) -> pd.DataFrame:
     """Calculate correlation matrix for specified features."""
     return df[features].corr()
+
+def get_feature_columns() -> List[str]:
+    """Return the list of feature columns used for model training."""
+    return ['Age', 'Fare', 'SibSp', 'Parch', 'Sex', 'Embarked', 'Pclass']

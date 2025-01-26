@@ -1,121 +1,112 @@
-"""Application services for the Titanic Survival Analysis project."""
-from typing import List, Dict, Optional
-from datetime import datetime
+"""Services for model training and prediction."""
+from typing import Dict, Optional, Tuple
 import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+import joblib
 
 from src.domain.entities import Passenger, ModelPrediction, ModelMetrics
-from src.domain.interfaces import IModelService, IDataPreprocessor
 from src.domain.exceptions import ModelNotFoundError, PredictionError
-from src.config.config import MODEL_PARAMS, FEATURE_ENGINEERING_PARAMS
+from src.utils.data_utils import get_feature_columns
+from src.config.config import MODEL_PARAMS, MODEL_PATH
 
-class ModelService(IModelService):
-    """Service for model operations."""
+class ModelService:
+    """Service for training and using the survival prediction model."""
     
-    def __init__(self, preprocessor: IDataPreprocessor):
-        self.preprocessor = preprocessor
-        self.model = RandomForestClassifier(**MODEL_PARAMS)
+    def __init__(self):
+        """Initialize the model service."""
+        self.model: Optional[RandomForestClassifier] = None
+        self.feature_columns = get_feature_columns()
     
-    def train(self, data: List[Passenger]) -> ModelMetrics:
+    def preprocess_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Preprocess the data for model training or prediction."""
+        # Ensure all required columns are present
+        for col in self.feature_columns:
+            if col not in df.columns:
+                raise ValueError(f"Missing required column: {col}")
+        
+        # Convert categorical variables if they're not already numeric
+        if df['Sex'].dtype == 'object':
+            df['Sex'] = df['Sex'].map({'male': 0, 'female': 1})
+        if df['Embarked'].dtype == 'object':
+            df['Embarked'] = df['Embarked'].map({'S': 0, 'C': 1, 'Q': 2})
+        
+        # Fill missing values
+        df['Age'].fillna(df['Age'].median(), inplace=True)
+        df['Fare'].fillna(df['Fare'].median(), inplace=True)
+        df['Embarked'].fillna(0, inplace=True)  # Default to 'S'
+        
+        return df[self.feature_columns]
+    
+    def train(self, df: pd.DataFrame) -> ModelMetrics:
         """Train the model and return metrics."""
-        # Preprocess data
-        processed_data = self.preprocessor.preprocess(data)
-        processed_data = self.preprocessor.feature_engineering(processed_data)
-        processed_data = self.preprocessor.encode_categorical(processed_data)
-        
-        # Convert to DataFrame
-        df = pd.DataFrame([vars(p) for p in processed_data])
-        
-        # Split features and target
-        features = FEATURE_ENGINEERING_PARAMS['numerical_features'] + \
-                  FEATURE_ENGINEERING_PARAMS['categorical_features']
-        X = df[features]
+        # Prepare data
+        X = self.preprocess_data(df)
         y = df['Survived']
         
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+        
         # Train model
-        self.model.fit(X, y)
+        self.model = RandomForestClassifier(**MODEL_PARAMS)
+        self.model.fit(X_train, y_train)
+        
+        # Save model
+        joblib.dump(self.model, MODEL_PATH)
         
         # Calculate metrics
-        y_pred = self.model.predict(X)
-        
-        return ModelMetrics(
-            model_version=datetime.now().strftime("%Y%m%d_%H%M%S"),
-            accuracy=accuracy_score(y, y_pred),
-            precision=precision_score(y, y_pred),
-            recall=recall_score(y, y_pred),
-            f1_score=f1_score(y, y_pred),
-            roc_auc=0.0,  # Calculate if needed
-            training_timestamp=datetime.now(),
-            feature_importance=dict(zip(features, self.model.feature_importances_)),
-            confusion_matrix=[[0, 0], [0, 0]]  # Calculate if needed
+        y_pred = self.model.predict(X_test)
+        metrics = ModelMetrics(
+            accuracy=self.model.score(X_test, y_test),
+            feature_importance=dict(zip(self.feature_columns, 
+                                      self.model.feature_importances_))
         )
+        
+        return metrics
     
     def predict(self, passenger: Passenger) -> ModelPrediction:
-        """Make a prediction for a passenger."""
-        if not hasattr(self, 'model') or self.model is None:
-            raise ModelNotFoundError("Model not trained")
+        """Make a prediction for a single passenger."""
+        if self.model is None:
+            try:
+                self.model = joblib.load(MODEL_PATH)
+            except FileNotFoundError:
+                raise ModelNotFoundError("Model not found. Please train the model first.")
+        
+        # Convert passenger to DataFrame
+        passenger_df = pd.DataFrame([passenger.__dict__])
         
         try:
-            # Preprocess single passenger
-            processed = self.preprocessor.preprocess([passenger])[0]
-            processed = self.preprocessor.feature_engineering([processed])[0]
-            processed = self.preprocessor.encode_categorical([processed])[0]
-            
-            # Convert to DataFrame
-            df = pd.DataFrame([vars(processed)])
-            
-            # Select features
-            features = FEATURE_ENGINEERING_PARAMS['numerical_features'] + \
-                      FEATURE_ENGINEERING_PARAMS['categorical_features']
-            X = df[features]
+            # Preprocess data
+            X = self.preprocess_data(passenger_df)
             
             # Make prediction
-            probability = self.model.predict_proba(X)[0][1]
-            prediction = probability >= 0.5
+            survival_prob = self.model.predict_proba(X)[0][1]
+            survived = survival_prob >= 0.5
             
             return ModelPrediction(
                 passenger_id=passenger.passenger_id,
-                survival_probability=probability,
-                predicted_survival=prediction,
-                prediction_timestamp=datetime.now(),
-                model_version=datetime.now().strftime("%Y%m%d_%H%M%S"),
-                feature_importance=dict(zip(features, self.model.feature_importances_))
+                survival_probability=float(survival_prob),
+                predicted_survival=bool(survived)
             )
-            
         except Exception as e:
             raise PredictionError(f"Prediction failed: {str(e)}")
     
-    def evaluate(self, test_data: List[Passenger]) -> ModelMetrics:
-        """Evaluate model performance on test data."""
-        if not hasattr(self, 'model') or self.model is None:
-            raise ModelNotFoundError("Model not trained")
+    def evaluate(self, test_data: pd.DataFrame) -> Dict[str, float]:
+        """Evaluate the model on test data."""
+        if self.model is None:
+            raise ModelNotFoundError("Model not found. Please train the model first.")
         
-        # Preprocess test data
-        processed_data = self.preprocessor.preprocess(test_data)
-        processed_data = self.preprocessor.feature_engineering(processed_data)
-        processed_data = self.preprocessor.encode_categorical(processed_data)
+        X_test = self.preprocess_data(test_data)
+        y_test = test_data['Survived']
         
-        # Convert to DataFrame
-        df = pd.DataFrame([vars(p) for p in processed_data])
+        y_pred = self.model.predict(X_test)
+        y_prob = self.model.predict_proba(X_test)[:, 1]
         
-        # Split features and target
-        features = FEATURE_ENGINEERING_PARAMS['numerical_features'] + \
-                  FEATURE_ENGINEERING_PARAMS['categorical_features']
-        X = df[features]
-        y = df['Survived']
-        
-        # Make predictions
-        y_pred = self.model.predict(X)
-        
-        return ModelMetrics(
-            model_version=datetime.now().strftime("%Y%m%d_%H%M%S"),
-            accuracy=accuracy_score(y, y_pred),
-            precision=precision_score(y, y_pred),
-            recall=recall_score(y, y_pred),
-            f1_score=f1_score(y, y_pred),
-            roc_auc=0.0,  # Calculate if needed
-            training_timestamp=datetime.now(),
-            feature_importance=dict(zip(features, self.model.feature_importances_)),
-            confusion_matrix=[[0, 0], [0, 0]]  # Calculate if needed
-        )
+        return {
+            'accuracy': self.model.score(X_test, y_test),
+            'feature_importance': dict(zip(self.feature_columns, 
+                                         self.model.feature_importances_))
+        }
