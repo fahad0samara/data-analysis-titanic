@@ -1,5 +1,8 @@
 # Titanic Survival Analysis Project
 
+[![Tests](https://github.com/fahad0samara/data-analysis-titanic/actions/workflows/python-app.yml/badge.svg)](https://github.com/fahad0samara/data-analysis-titanic/actions)
+[![codecov](https://codecov.io/gh/fahad0samara/data-analysis-titanic/branch/main/graph/badge.svg)](https://codecov.io/gh/fahad0samara/data-analysis-titanic)
+
 An advanced machine learning project that analyzes the Titanic dataset and predicts passenger survival using a clean architecture approach.
 
 ## 🌟 Features
@@ -130,7 +133,8 @@ An advanced machine learning project that analyzes the Titanic dataset and predi
 
 ### Running Tests
 ```bash
-pytest tests/
+# Run tests with coverage
+pytest tests/ --cov=src --cov-report=html
 ```
 
 ### Code Quality
