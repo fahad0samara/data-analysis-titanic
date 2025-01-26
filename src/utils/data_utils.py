@@ -23,8 +23,8 @@ def load_and_preprocess_data(filepath: str) -> pd.DataFrame:
     # Create new features
     df['IsAlone'] = (df['FamilySize'] == 1).astype(int)
     
-    # Extract title from name
-    df['Title'] = df['Name'].str.extract(' ([A-Za-z]+)\.', expand=False)
+    # Extract title from name using raw string
+    df['Title'] = df['Name'].str.extract(r' ([A-Za-z]+)\.', expand=False)
     df['Title'] = df['Title'].replace(['Lady', 'Countess','Capt', 'Col','Don', 
                                      'Dr', 'Major', 'Rev', 'Sir', 'Jonkheer', 'Dona'], 'Rare')
     df['Title'] = df['Title'].replace('Mlle', 'Miss')

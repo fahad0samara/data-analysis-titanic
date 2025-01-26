@@ -5,20 +5,20 @@ from pathlib import Path
 # Project root directory
 ROOT_DIR = Path(__file__).parent.parent.parent
 
-# Data directories
+# Data paths
 DATA_DIR = ROOT_DIR / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 INTERIM_DATA_DIR = DATA_DIR / "interim"
 
-# Model directories
-MODELS_DIR = ROOT_DIR / "models"
-MODEL_ARTIFACTS_DIR = MODELS_DIR / "artifacts"
-MODEL_METRICS_DIR = MODELS_DIR / "metrics"
+# Model paths
+MODEL_DIR = ROOT_DIR / "models"
+MODEL_ARTIFACTS_DIR = MODEL_DIR / "artifacts"
+MODEL_METRICS_DIR = MODEL_DIR / "metrics"
+MODEL_PATH = MODEL_ARTIFACTS_DIR / "best_model.joblib"
 
 # Create directories if they don't exist
-for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, INTERIM_DATA_DIR,
-                 MODEL_ARTIFACTS_DIR, MODEL_METRICS_DIR]:
+for directory in [RAW_DATA_DIR, PROCESSED_DATA_DIR, INTERIM_DATA_DIR, MODEL_ARTIFACTS_DIR, MODEL_METRICS_DIR, MODEL_DIR]:
     directory.mkdir(parents=True, exist_ok=True)
 
 # Data file paths
@@ -32,7 +32,7 @@ MODEL_METRICS_PATH = MODEL_METRICS_DIR / "model_metrics.json"
 # Model parameters
 MODEL_PARAMS = {
     'n_estimators': 100,
-    'max_depth': None,
+    'max_depth': 10,
     'min_samples_split': 2,
     'min_samples_leaf': 1,
     'random_state': 42
@@ -55,3 +55,28 @@ API_WORKERS = 4
 # Dashboard settings
 DASHBOARD_PORT = 8501
 DASHBOARD_THEME = "light"
+
+# Logging settings
+LOGGING_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        },
+    },
+    'handlers': {
+        'default': {
+            'level': 'INFO',
+            'formatter': 'standard',
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        '': {
+            'handlers': ['default'],
+            'level': 'INFO',
+            'propagate': True
+        }
+    }
+}
