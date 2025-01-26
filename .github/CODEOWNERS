@@ -1,0 +1,24 @@
+# These owners will be the default owners for everything in
+# the repo. Unless a later match takes precedence,
+# @fahad0samara will be requested for review when someone 
+# opens a pull request.
+*       @fahad0samara
+
+# Order is important; the last matching pattern takes the most
+# precedence.
+
+# Core application code
+/src/                   @fahad0samara
+/tests/                 @fahad0samara
+
+# Documentation
+/docs/                  @fahad0samara
+*.md                    @fahad0samara
+
+# Data and models
+/data/                  @fahad0samara
+/models/                @fahad0samara
+
+# Configuration
+*.yml                   @fahad0samara
+requirements.txt        @fahad0samara
