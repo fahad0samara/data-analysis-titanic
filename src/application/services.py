@@ -1,9 +1,10 @@
 """Services for model training and prediction."""
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
 import joblib
 
 from src.domain.entities import Passenger, ModelPrediction, ModelMetrics
@@ -57,12 +58,20 @@ class ModelService:
         # Save model
         joblib.dump(self.model, MODEL_PATH)
         
-        # Calculate metrics
+        # Make predictions
         y_pred = self.model.predict(X_test)
+        y_pred_proba = self.model.predict_proba(X_test)[:, 1]
+        
+        # Calculate metrics
         metrics = ModelMetrics(
-            accuracy=self.model.score(X_test, y_test),
+            accuracy=accuracy_score(y_test, y_pred),
+            precision=precision_score(y_test, y_pred),
+            recall=recall_score(y_test, y_pred),
+            f1_score=f1_score(y_test, y_pred),
+            roc_auc=roc_auc_score(y_test, y_pred_proba),
             feature_importance=dict(zip(self.feature_columns, 
-                                      self.model.feature_importances_))
+                                      self.model.feature_importances_)),
+            confusion_matrix=confusion_matrix(y_test, y_pred).tolist()
         )
         
         return metrics
@@ -76,7 +85,15 @@ class ModelService:
                 raise ModelNotFoundError("Model not found. Please train the model first.")
         
         # Convert passenger to DataFrame
-        passenger_df = pd.DataFrame([passenger.__dict__])
+        passenger_df = pd.DataFrame([{
+            'Age': passenger.age,
+            'Fare': passenger.fare,
+            'SibSp': passenger.sibsp,
+            'Parch': passenger.parch,
+            'Sex': passenger.sex,
+            'Embarked': passenger.embarked,
+            'Pclass': passenger.pclass
+        }])
         
         try:
             # Preprocess data
@@ -106,7 +123,7 @@ class ModelService:
         y_prob = self.model.predict_proba(X_test)[:, 1]
         
         return {
-            'accuracy': self.model.score(X_test, y_test),
+            'accuracy': accuracy_score(y_test, y_pred),
             'feature_importance': dict(zip(self.feature_columns, 
                                          self.model.feature_importances_))
         }
