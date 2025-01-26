@@ -5,6 +5,7 @@ import pandas as pd
 import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+from sklearn.ensemble import RandomForestClassifier
 
 from src.domain.entities import Passenger, ModelPrediction, ModelMetrics
 from src.config.config import (
